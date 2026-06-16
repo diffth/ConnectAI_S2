@@ -1,6 +1,83 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 function Checkout({ setPage }) {
+  const [paymentMethod, setPaymentMethod] = useState('paypal');
+  const [sdkReady, setSdkReady] = useState(false);
+  const [error, setError] = useState(null);
+  const paypalButtonRef = useRef(null);
+
+  // PayPal SDK 동적 로딩
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_PAYPAL_CLIENT_ID;
+    if (!clientId) {
+      setError("PayPal Client ID가 설정되지 않았습니다. .env 파일을 확인해 주세요.");
+      return;
+    }
+
+    const existingScript = document.getElementById('paypal-sdk');
+    if (existingScript) {
+      setSdkReady(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'paypal-sdk';
+    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
+    script.async = true;
+    script.onload = () => {
+      setSdkReady(true);
+    };
+    script.onerror = () => {
+      setError("PayPal SDK를 불러오는데 실패했습니다.");
+    };
+    document.body.appendChild(script);
+  }, []);
+
+  // SDK가 준비되었고, 결제수단이 paypal일 때 버튼 렌더링
+  useEffect(() => {
+    if (sdkReady && paymentMethod === 'paypal' && window.paypal) {
+      if (paypalButtonRef.current) {
+        paypalButtonRef.current.innerHTML = '';
+        
+        window.paypal.Buttons({
+          createOrder: (data, actions) => {
+            return actions.order.create({
+              purchase_units: [
+                {
+                  amount: {
+                    currency_code: 'USD',
+                    value: '320.00',
+                  },
+                  description: 'Vivid Aura Fashion Order - Sneakers & ANC',
+                },
+              ],
+            });
+          },
+          onApprove: async (data, actions) => {
+            try {
+              const order = await actions.order.capture();
+              alert(`결제가 완료되었습니다! 주문 번호: ${order.id}. 😊`);
+              setPage('orders');
+            } catch (err) {
+              console.error('Capture error:', err);
+              alert('결제 승인 과정에서 오류가 발생했습니다.');
+            }
+          },
+          onError: (err) => {
+            console.error('PayPal Checkout error:', err);
+            alert('결제 진행 중 오류가 발생했습니다. 다시 시도해 주세요.');
+          },
+          style: {
+            layout: 'vertical',
+            color: 'gold',
+            shape: 'rect',
+            label: 'paypal',
+          }
+        }).render(paypalButtonRef.current);
+      }
+    }
+  }, [sdkReady, paymentMethod]);
+
   const handlePayment = () => {
     alert('결제가 완료되었습니다! 주문 내역 페이지로 이동합니다. 😊');
     setPage('orders');
@@ -96,39 +173,57 @@ function Checkout({ setPage }) {
         <section className="bg-pure-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-4 border border-surface-variant">
           <h2 className="font-label-md text-label-md text-on-surface-variant mb-4 uppercase tracking-wider">Payment Method</h2>
           <div className="flex flex-col gap-2">
-            <label className="flex items-center justify-between p-3 border-2 border-primary rounded-lg bg-primary-fixed/10 cursor-pointer transition-colors">
+            <div 
+              onClick={() => setPaymentMethod('paypal')}
+              className={`flex items-center justify-between p-3 border-2 rounded-lg cursor-pointer transition-colors ${paymentMethod === 'paypal' ? 'border-primary bg-primary/5' : 'border-light-steel'}`}
+            >
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-primary icon-fill">payments</span>
                 <span className="font-body-md text-on-background font-semibold">PayPal</span>
               </div>
               <div className="w-5 h-5 rounded-full border-2 border-primary flex items-center justify-center">
-                <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>
+                {paymentMethod === 'paypal' && <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>}
               </div>
-            </label>
+            </div>
             {/* Method 1 */}
-            <label className="flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors border border-light-steel">
+            <div 
+              onClick={() => setPaymentMethod('card')}
+              className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${paymentMethod === 'card' ? 'border-primary bg-primary/5' : 'border-light-steel'}`}
+            >
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-on-surface-variant">credit_card</span>
                 <span className="font-body-md text-on-background">Credit/Debit Card</span>
               </div>
-              <div className="w-5 h-5 rounded-full border-2 border-light-steel"></div>
-            </label>
+              <div className="w-5 h-5 rounded-full border border-light-steel flex items-center justify-center">
+                {paymentMethod === 'card' && <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>}
+              </div>
+            </div>
             {/* Method 2 */}
-            <label className="flex items-center justify-between p-3 border border-light-steel rounded-lg hover:bg-ghostly-gray cursor-pointer transition-colors">
+            <div 
+              onClick={() => setPaymentMethod('applepay')}
+              className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${paymentMethod === 'applepay' ? 'border-primary bg-primary/5' : 'border-light-steel'}`}
+            >
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-on-surface-variant">account_balance_wallet</span>
                 <span className="font-body-md text-on-background">Apple Pay</span>
               </div>
-              <div className="w-5 h-5 rounded-full border-2 border-light-steel"></div>
-            </label>
+              <div className="w-5 h-5 rounded-full border border-light-steel flex items-center justify-center">
+                {paymentMethod === 'applepay' && <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>}
+              </div>
+            </div>
             {/* Method 3 */}
-            <label className="flex items-center justify-between p-3 border border-light-steel rounded-lg hover:bg-ghostly-gray cursor-pointer transition-colors">
+            <div 
+              onClick={() => setPaymentMethod('bank')}
+              className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${paymentMethod === 'bank' ? 'border-primary bg-primary/5' : 'border-light-steel'}`}
+            >
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-on-surface-variant">account_balance</span>
                 <span className="font-body-md text-on-background">Bank Transfer</span>
               </div>
-              <div className="w-5 h-5 rounded-full border-2 border-light-steel"></div>
-            </label>
+              <div className="w-5 h-5 rounded-full border border-light-steel flex items-center justify-center">
+                {paymentMethod === 'bank' && <div className="w-2.5 h-2.5 rounded-full bg-primary"></div>}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -156,14 +251,29 @@ function Checkout({ setPage }) {
       {/* Fixed Bottom Action Area */}
       <div className="fixed bottom-0 w-full z-50 bg-pure-white/95 backdrop-blur-sm border-t border-surface-variant p-margin-mobile pb-[max(16px,env(safe-area-inset-bottom))] shadow-[0px_-4px_16px_rgba(0,0,0,0.05)]">
         <div className="max-w-lg mx-auto">
-          <button 
-            id="pay-btn" 
-            onClick={handlePayment}
-            className="w-full bg-primary text-pure-white font-headline-md text-[18px] py-4 rounded-lg shadow-[0px_4px_12px_rgba(189,0,61,0.3)] hover:scale-[1.02] active:scale-95 transition-all duration-200 flex items-center justify-center gap-2"
-          >
-            PayPal로 결제하기 
-            <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
-          </button>
+          {error && (
+            <div className="text-red-500 text-sm text-center mb-2">{error}</div>
+          )}
+          {paymentMethod === 'paypal' ? (
+            <div className="w-full flex flex-col items-center">
+              {!sdkReady && (
+                <div className="text-on-surface-variant text-sm py-3 flex items-center gap-2">
+                  <span className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></span>
+                  PayPal 불러오는 중...
+                </div>
+              )}
+              <div ref={paypalButtonRef} className="w-full" style={{ minHeight: '45px', zIndex: 10 }} />
+            </div>
+          ) : (
+            <button 
+              id="pay-btn" 
+              onClick={handlePayment}
+              className="w-full bg-primary text-pure-white font-headline-md text-[18px] py-4 rounded-lg shadow-[0px_4px_12px_rgba(189,0,61,0.3)] hover:scale-[1.02] active:scale-95 transition-all duration-200 flex items-center justify-center gap-2"
+            >
+              {paymentMethod === 'card' ? '신용카드로 결제하기' : paymentMethod === 'applepay' ? 'Apple Pay로 결제하기' : '무통장 입금하기'} 
+              <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
